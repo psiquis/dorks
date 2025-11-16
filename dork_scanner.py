@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Google Dork Scanner v2.1 - Herramienta de reconocimiento automatizado
-Enumeración dinámica de subdominios + 300+ Google Dorks de GHDB
+Google Dork Scanner v2.2 - Herramienta de reconocimiento automatizado
+Subdominios REALES + Búsqueda activa en Google + 300+ Google Dorks de GHDB
 """
 
 import argparse
@@ -157,12 +157,13 @@ class GoogleDorkScanner:
         return subdomains
 
     def print_banner(self):
-        mode = "OFFLINE" if self.offline else "ONLINE (APIs + Fallback)"
+        mode = "OFFLINE" if self.offline else "ONLINE (Subdominios REALES + Búsqueda activa)"
         banner = f"""
 {Colors.OKCYAN}
 ╔═══════════════════════════════════════════════════════════╗
-║           Google Dork Scanner v2.1                        ║
-║           Enumeración Dinámica de Subdominios             ║
+║           Google Dork Scanner v2.2                        ║
+║           Subdominios REALES desde certificados           ║
+║           Búsqueda ACTIVA en Google (detecta resultados)  ║
 ║           Base de datos GHDB completa (300+ dorks)        ║
 ╚═══════════════════════════════════════════════════════════╝
 {Colors.ENDC}
@@ -173,149 +174,47 @@ class GoogleDorkScanner:
         print(banner)
 
     def enumerate_subdomains_dynamic(self) -> Set[str]:
-        """Enumera subdominios usando APIs + Fallback a prefijos comunes"""
+        """Enumera subdominios REALES usando solo APIs (certificados, DNS, etc)"""
         all_subdomains = set()
         all_subdomains.add(self.domain)  # Dominio principal
 
-        if not self.offline and REQUESTS_AVAILABLE:
-            print(f"\n{Colors.HEADER}[*] Enumerando subdominios desde fuentes online...{Colors.ENDC}\n")
+        if self.offline or not REQUESTS_AVAILABLE:
+            print(f"\n{Colors.WARNING}[!] Modo offline: Solo se usará el dominio principal{Colors.ENDC}\n")
+            self.subdomains = all_subdomains
+            return all_subdomains
 
-            # APIs externas
-            try:
-                subs = self.enumerate_subdomains_crtsh()
-                all_subdomains.update(subs)
-                time.sleep(2)
-            except:
-                pass
+        print(f"\n{Colors.HEADER}[*] Enumerando subdominios REALES desde fuentes online...{Colors.ENDC}\n")
 
-            try:
-                subs = self.enumerate_subdomains_hackertarget()
-                all_subdomains.update(subs)
-                time.sleep(2)
-            except:
-                pass
+        # APIs externas
+        try:
+            subs = self.enumerate_subdomains_crtsh()
+            all_subdomains.update(subs)
+            time.sleep(2)
+        except:
+            pass
 
-            try:
-                subs = self.enumerate_subdomains_alienvault()
-                all_subdomains.update(subs)
-                time.sleep(2)
-            except:
-                pass
+        try:
+            subs = self.enumerate_subdomains_hackertarget()
+            all_subdomains.update(subs)
+            time.sleep(2)
+        except:
+            pass
 
-            try:
-                subs = self.enumerate_subdomains_threatcrowd()
-                all_subdomains.update(subs)
-                time.sleep(2)
-            except:
-                pass
+        try:
+            subs = self.enumerate_subdomains_alienvault()
+            all_subdomains.update(subs)
+            time.sleep(2)
+        except:
+            pass
 
-            api_count = len(all_subdomains) - 1  # menos el dominio principal
-            print(f"\n{Colors.OKGREEN}[+] Subdominios desde APIs: {api_count}{Colors.ENDC}")
+        try:
+            subs = self.enumerate_subdomains_threatcrowd()
+            all_subdomains.update(subs)
+            time.sleep(2)
+        except:
+            pass
 
-        # Agregar prefijos comunes (siempre, como fallback)
-        print(f"{Colors.OKBLUE}[*] Agregando prefijos comunes...{Colors.ENDC}", end=' ', flush=True)
-
-        # LISTA EXHAUSTIVA DE PREFIJOS (200+) - Basado en reconocimiento real
-        common_prefixes = [
-            # Infraestructura Web Básica
-            'www', 'www1', 'www2', 'www3', 'web', 'web1', 'web2', 'webserver', 'host', 'server',
-
-            # Email y Comunicación
-            'mail', 'mail1', 'mail2', 'email', 'webmail', 'smtp', 'smtp1', 'smtp2', 'pop', 'pop3',
-            'imap', 'exchange', 'owa', 'outlook', 'mx', 'mx1', 'mx2', 'mx3', 'mx4', 'relay',
-
-            # FTP y Archivos
-            'ftp', 'ftp1', 'ftp2', 'sftp', 'files', 'file', 'fileserver', 'download', 'downloads',
-            'upload', 'uploads', 'data', 'share', 'shares', 'transfer', 'webdisk',
-
-            # DNS
-            'ns', 'ns1', 'ns2', 'ns3', 'ns4', 'ns5', 'dns', 'dns1', 'dns2', 'nameserver',
-
-            # Desarrollo y Testing
-            'dev', 'devel', 'develop', 'developer', 'development', 'test', 'test1', 'test2', 'testing',
-            'qa', 'uat', 'staging', 'stage', 'stage1', 'preprod', 'pre-prod', 'beta', 'alpha',
-            'demo', 'demo1', 'sandbox', 'lab', 'labs', 'playground',
-
-            # APIs
-            'api', 'api1', 'api2', 'api3', 'api-dev', 'api-staging', 'api-prod', 'api-test',
-            'rest', 'restapi', 'graphql', 'gateway', 'ws', 'webservice', 'microservice',
-
-            # Administración y Panel de Control
-            'admin', 'admin1', 'admin2', 'administrator', 'administration', 'admins', 'adm',
-            'panel', 'control', 'cpanel', 'whm', 'plesk', 'directadmin', 'webmin', 'ispconfig',
-            'portal', 'dashboard', 'management', 'manage', 'console', 'backend',
-
-            # Autenticación y Seguridad
-            'login', 'signin', 'signup', 'register', 'auth', 'authentication', 'oauth', 'sso',
-            'secure', 'security', 'ssl', 'vpn', 'remote', 'access', 'citrix', 'rdp', 'radius',
-
-            # Bases de Datos
-            'db', 'db1', 'db2', 'database', 'mysql', 'mssql', 'postgres', 'postgresql', 'oracle',
-            'mongo', 'mongodb', 'redis', 'cassandra', 'elastic', 'elasticsearch', 'sql',
-
-            # Monitoreo y Logging
-            'monitor', 'monitoring', 'metrics', 'stats', 'statistics', 'grafana', 'prometheus',
-            'kibana', 'logstash', 'logs', 'log', 'syslog', 'splunk', 'nagios', 'zabbix',
-            'status', 'health', 'healthcheck', 'ping', 'uptime',
-
-            # DevOps y CI/CD
-            'jenkins', 'ci', 'cd', 'build', 'builder', 'gitlab', 'github', 'bitbucket', 'git',
-            'svn', 'cvs', 'scm', 'repo', 'repository', 'code', 'deploy', 'deployment',
-            'ansible', 'puppet', 'chef', 'terraform', 'kubernetes', 'k8s', 'docker', 'registry',
-
-            # Cloud y Hosting
-            'cloud', 'aws', 'amazon', 'azure', 'gcp', 'google-cloud', 'digitalocean', 'linode',
-            'hosting', 'vps', 'vm', 'virtual', 'container', 'cluster',
-
-            # Contenido y Media
-            'blog', 'news', 'cms', 'wordpress', 'wp', 'drupal', 'joomla', 'magento',
-            'static', 'assets', 'cdn', 'media', 'images', 'image', 'img', 'pics', 'pictures',
-            'photos', 'photo', 'gallery', 'video', 'videos', 'stream', 'streaming',
-
-            # E-commerce
-            'shop', 'store', 'ecommerce', 'cart', 'shopping', 'checkout', 'payment', 'payments',
-            'pay', 'billing', 'invoice', 'order', 'orders',
-
-            # Colaboración y Documentación
-            'wiki', 'docs', 'doc', 'documentation', 'help', 'support', 'helpdesk', 'ticket',
-            'tickets', 'jira', 'confluence', 'sharepoint', 'slack', 'mattermost', 'chat',
-            'forum', 'forums', 'community', 'kb', 'knowledge', 'faq',
-
-            # Mobile
-            'mobile', 'm', 'app', 'apps', 'ios', 'android', 'apk',
-
-            # Backup y Versiones
-            'backup', 'backups', 'bak', 'old', 'new', 'archive', 'archives',
-            'legacy', 'v1', 'v2', 'v3', 'v4', 'version1', 'version2', 'latest',
-
-            # CRM y Business
-            'crm', 'erp', 'hr', 'finance', 'accounting', 'sales', 'marketing',
-            'customer', 'clients', 'partners', 'partner', 'vendor', 'vendors', 'supplier',
-
-            # Interno/Corporativo
-            'intranet', 'internal', 'corp', 'corporate', 'office', 'extranet',
-            'employee', 'employees', 'staff', 'team',
-
-            # Servicios Específicos
-            'directory', 'ldap', 'ad', 'activedirectory', 'samba', 'nfs', 'nas', 'storage',
-            'print', 'printer', 'scan', 'scanner', 'fax',
-
-            # Networking
-            'router', 'switch', 'firewall', 'proxy', 'lb', 'loadbalancer', 'balancer',
-            'gateway', 'edge', 'wan', 'lan',
-
-            # Otros Comunes
-            'info', 'information', 'about', 'contact', 'home', 'main', 'default',
-            'public', 'private', 'local', 'localhost', 'node', 'node1', 'node2',
-            'prod', 'production', 'live', 'preview', 'temp', 'tmp', 'cache',
-            'search', 'config', 'configuration', 'settings', 'setup', 'install', 'installer',
-        ]
-
-        for prefix in common_prefixes:
-            subdomain = f"{prefix}.{self.domain}"
-            all_subdomains.add(subdomain)
-
-        print(f"{Colors.OKGREEN}✓ {len(common_prefixes)} agregados{Colors.ENDC}")
+        print(f"{Colors.OKBLUE}[+] Subdominios desde APIs: {len(all_subdomains) - 1}{Colors.ENDC}")  # -1 para excluir el dominio principal
 
         # Limpiar wildcards y validar
         valid_subdomains = set()
@@ -327,7 +226,7 @@ class GoogleDorkScanner:
         self.subdomains = valid_subdomains
 
         print(f"\n{Colors.OKGREEN}{'='*60}{Colors.ENDC}")
-        print(f"{Colors.OKGREEN}[+] Total subdominios únicos: {len(valid_subdomains)}{Colors.ENDC}")
+        print(f"{Colors.OKGREEN}[+] Total subdominios REALES únicos: {len(valid_subdomains)}{Colors.ENDC}")
         print(f"{Colors.OKGREEN}{'='*60}{Colors.ENDC}\n")
 
         return valid_subdomains
@@ -699,9 +598,59 @@ class GoogleDorkScanner:
 
         return dorks
 
+    def check_dork_has_results(self, search_url: str) -> bool:
+        """
+        Ejecuta búsqueda en Google y detecta si hay resultados
+        Retorna True si encuentra resultados, False si no
+        """
+        if not REQUESTS_AVAILABLE:
+            return False
+
+        try:
+            headers = self.get_random_headers()
+            response = requests.get(search_url, headers=headers, timeout=15)
+
+            if response.status_code != 200:
+                return False
+
+            html = response.text.lower()
+
+            # Patrones que indican NO hay resultados
+            no_results_patterns = [
+                'did not match any documents',
+                'no results found',
+                'no se encontraron resultados',
+                'geen resultaten gevonden',
+                'your search .* did not match',
+                'did not return any results'
+            ]
+
+            for pattern in no_results_patterns:
+                if re.search(pattern, html):
+                    return False
+
+            # Patrones que indican SÍ hay resultados
+            # Si hay div de resultados o enlaces de resultados, hay contenido
+            has_results_patterns = [
+                r'<div[^>]+class="[^"]*g[^"]*"',  # Contenedor de resultados de Google
+                r'<h3[^>]*>',  # Títulos de resultados
+                r'about \d+[\d,]* results',  # "About X results"
+                r'aproximadamente \d+',  # Versión en español
+            ]
+
+            for pattern in has_results_patterns:
+                if re.search(pattern, html):
+                    return True
+
+            return False
+
+        except Exception as e:
+            # Si hay error, asumimos que no hay resultados
+            return False
+
     def scan_dorks(self):
-        """Escanea todos los dorks contra todos los subdominios"""
-        print(f"\n{Colors.HEADER}[*] Iniciando escaneo de Google Dorks...{Colors.ENDC}")
+        """Escanea todos los dorks contra todos los subdominios y SOLO retorna los que tienen resultados"""
+        print(f"\n{Colors.HEADER}[*] Iniciando escaneo ACTIVO de Google Dorks...{Colors.ENDC}")
 
         dorks = self.get_google_dorks_ghdb()
         total_combinations = len(dorks) * len(self.subdomains)
@@ -709,14 +658,21 @@ class GoogleDorkScanner:
         print(f"{Colors.OKBLUE}[*] Total de dorks (GHDB): {len(dorks)}{Colors.ENDC}")
         print(f"{Colors.OKBLUE}[*] Total de subdominios: {len(self.subdomains)}{Colors.ENDC}")
         print(f"{Colors.OKBLUE}[*] Total de combinaciones: {total_combinations}{Colors.ENDC}")
-        print(f"{Colors.WARNING}[!] Nota: Las búsquedas se generan pero NO se ejecutan automáticamente{Colors.ENDC}")
-        print(f"{Colors.WARNING}[!] Debes copiar las URLs y abrirlas manualmente en tu navegador{Colors.ENDC}\n")
 
-        all_results = []
+        if self.offline or not REQUESTS_AVAILABLE:
+            print(f"{Colors.WARNING}[!] Modo offline: Solo se generarán URLs (no se ejecutarán búsquedas){Colors.ENDC}\n")
+        else:
+            print(f"{Colors.OKGREEN}[✓] Modo ACTIVO: Se ejecutarán búsquedas reales en Google{Colors.ENDC}")
+            print(f"{Colors.WARNING}[!] Esto puede tomar tiempo. Se aplicarán delays para evitar CAPTCHA{Colors.ENDC}")
+            print(f"{Colors.WARNING}[!] Solo se mostrarán dorks con RESULTADOS REALES{Colors.ENDC}\n")
+
+        results_with_hits = []  # Solo dorks que tienen resultados
+        all_results = []  # Todas las combinaciones (para modo offline)
         counter = 0
+        hits_found = 0
 
         for subdomain in sorted(self.subdomains):
-            print(f"\n{Colors.OKCYAN}[*] Generando dorks para: {subdomain}{Colors.ENDC}")
+            print(f"\n{Colors.OKCYAN}[*] Escaneando: {subdomain}{Colors.ENDC}")
 
             for dork_info in dorks:
                 counter += 1
@@ -734,18 +690,47 @@ class GoogleDorkScanner:
                     'url': search_url,
                     'timestamp': datetime.now().isoformat()
                 }
-                all_results.append(result)
 
-                if counter % 50 == 0:
-                    progress = (counter / total_combinations) * 100
-                    print(f"  [{counter}/{total_combinations}] ({progress:.1f}%) generados...")
+                # Modo OFFLINE: solo generar URLs
+                if self.offline or not REQUESTS_AVAILABLE:
+                    all_results.append(result)
+                    if counter % 50 == 0:
+                        progress = (counter / total_combinations) * 100
+                        print(f"  [{counter}/{total_combinations}] ({progress:.1f}%) generados...")
+                else:
+                    # Modo ONLINE: ejecutar búsqueda real
+                    has_results = self.check_dork_has_results(search_url)
 
-        print(f"\n{Colors.OKGREEN}[+] Total URLs generadas: {len(all_results)}{Colors.ENDC}")
-        return all_results
+                    if has_results:
+                        result['has_results'] = True
+                        results_with_hits.append(result)
+                        hits_found += 1
+                        print(f"  {Colors.OKGREEN}✓ HIT [{hits_found}]{Colors.ENDC} {category}: {formatted_dork[:80]}...")
+
+                    # Progress update cada 20 búsquedas
+                    if counter % 20 == 0:
+                        progress = (counter / total_combinations) * 100
+                        print(f"  {Colors.OKBLUE}[{counter}/{total_combinations}] ({progress:.1f}%) | Hits: {hits_found}{Colors.ENDC}")
+
+                    # Delay para evitar CAPTCHA (3-6 segundos aleatorio)
+                    time.sleep(random.uniform(3, 6))
+
+        if self.offline or not REQUESTS_AVAILABLE:
+            print(f"\n{Colors.OKGREEN}[+] Total URLs generadas: {len(all_results)}{Colors.ENDC}")
+            return all_results
+        else:
+            print(f"\n{Colors.OKGREEN}{'='*60}{Colors.ENDC}")
+            print(f"{Colors.OKGREEN}[+] Búsquedas completadas: {counter}{Colors.ENDC}")
+            print(f"{Colors.OKGREEN}[+] DORKS CON RESULTADOS: {hits_found}{Colors.ENDC}")
+            print(f"{Colors.OKGREEN}{'='*60}{Colors.ENDC}\n")
+            return results_with_hits
 
     def generate_report(self, results: List[Dict]):
-        """Genera reporte de resultados"""
+        """Genera reporte de resultados - SOLO muestra resultados con HITS en modo online"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Detectar si hay resultados con búsquedas activas
+        has_active_search = any('has_results' in r for r in results)
 
         print(f"\n{Colors.HEADER}{'='*60}{Colors.ENDC}")
         print(f"{Colors.HEADER}REPORTE DE ESCANEO{Colors.ENDC}")
@@ -759,21 +744,28 @@ class GoogleDorkScanner:
                 by_category[cat] = []
             by_category[cat].append(result)
 
-        print(f"{Colors.OKGREEN}[+] Categorías encontradas: {len(by_category)}{Colors.ENDC}")
-        print(f"{Colors.OKGREEN}[+] Total de URLs generadas: {len(results)}{Colors.ENDC}\n")
+        if has_active_search:
+            print(f"{Colors.OKGREEN}[+] DORKS CON RESULTADOS REALES: {len(results)}{Colors.ENDC}")
+            print(f"{Colors.OKGREEN}[+] Categorías con hits: {len(by_category)}{Colors.ENDC}\n")
+        else:
+            print(f"{Colors.OKGREEN}[+] Categorías encontradas: {len(by_category)}{Colors.ENDC}")
+            print(f"{Colors.OKGREEN}[+] Total de URLs generadas: {len(results)}{Colors.ENDC}\n")
 
         # Guardar JSON completo
         json_file = f"dork_scan_{self.domain}_{timestamp}.json"
+        mode_text = "Búsqueda Activa (Solo resultados reales)" if has_active_search else ("Offline" if self.offline else "Online - Generación de URLs")
+
         with open(json_file, 'w', encoding='utf-8') as f:
             json.dump({
                 'domain': self.domain,
                 'scan_date': timestamp,
-                'version': '2.0',
-                'mode': '100% Offline',
+                'version': '2.2',
+                'mode': mode_text,
+                'active_search': has_active_search,
                 'total_subdomains': len(self.subdomains),
                 'subdomains': sorted(list(self.subdomains)),
                 'total_dorks': len(self.get_google_dorks_ghdb()),
-                'total_urls': len(results),
+                'total_results': len(results),
                 'categories': list(by_category.keys()),
                 'results': results
             }, f, indent=2, ensure_ascii=False)
@@ -783,42 +775,60 @@ class GoogleDorkScanner:
         # Guardar reporte de texto con URLs
         txt_file = f"dork_scan_{self.domain}_{timestamp}.txt"
         with open(txt_file, 'w', encoding='utf-8') as f:
-            f.write(f"Google Dork Scanner v2.0 - Reporte\n")
+            f.write(f"Google Dork Scanner v2.2 - Reporte\n")
             f.write(f"{'='*60}\n\n")
             f.write(f"Dominio: {self.domain}\n")
             f.write(f"Fecha: {timestamp}\n")
-            f.write(f"Modo: 100% Offline (Sin APIs)\n")
-            f.write(f"Total subdominios: {len(self.subdomains)}\n")
+            f.write(f"Modo: {mode_text}\n")
+            f.write(f"Total subdominios REALES: {len(self.subdomains)}\n")
             f.write(f"Total dorks GHDB: {len(self.get_google_dorks_ghdb())}\n")
-            f.write(f"Total URLs generadas: {len(results)}\n\n")
 
-            f.write(f"TODAS LAS URLS POR CATEGORÍA:\n")
-            f.write(f"{'='*60}\n\n")
+            if has_active_search:
+                f.write(f"DORKS CON RESULTADOS: {len(results)}\n\n")
+                f.write(f"{'='*60}\n")
+                f.write(f"SOLO DORKS QUE RETORNARON RESULTADOS:\n")
+                f.write(f"{'='*60}\n\n")
+            else:
+                f.write(f"Total URLs generadas: {len(results)}\n\n")
+                f.write(f"TODAS LAS URLS POR CATEGORÍA:\n")
+                f.write(f"{'='*60}\n\n")
 
             for category in sorted(by_category.keys()):
                 results_cat = by_category[category]
-                f.write(f"\n[{category}] - {len(results_cat)} URLs:\n")
+                f.write(f"\n[{category}] - {len(results_cat)} resultados:\n")
                 f.write(f"{'-'*60}\n")
                 for r in results_cat:
                     f.write(f"Target: {r['target']}\n")
                     f.write(f"Dork: {r['dork']}\n")
-                    f.write(f"URL: {r['url']}\n\n")
+                    f.write(f"URL: {r['url']}\n")
+                    if 'has_results' in r:
+                        f.write(f"✓ TIENE RESULTADOS REALES\n")
+                    f.write(f"\n")
 
         print(f"{Colors.OKGREEN}[+] Reporte TXT guardado: {txt_file}{Colors.ENDC}")
 
         # Guardar archivo solo con URLs (fácil para abrir)
         urls_file = f"dork_urls_{self.domain}_{timestamp}.txt"
         with open(urls_file, 'w', encoding='utf-8') as f:
+            if has_active_search:
+                f.write(f"# Google Dork Scanner v2.2 - URLs con RESULTADOS REALES\n")
+                f.write(f"# Dominio: {self.domain}\n")
+                f.write(f"# Total hits: {len(results)}\n\n")
             for result in results:
                 f.write(f"{result['url']}\n")
 
         print(f"{Colors.OKGREEN}[+] Lista de URLs guardada: {urls_file}{Colors.ENDC}")
-        print(f"\n{Colors.OKCYAN}[*] Copia y pega las URLs en tu navegador para verificar resultados{Colors.ENDC}")
+
+        if has_active_search:
+            print(f"\n{Colors.OKCYAN}★ Los archivos contienen SOLO dorks que retornaron resultados reales{Colors.ENDC}")
+            print(f"{Colors.OKCYAN}★ Verifica cada URL para analizar los hallazgos{Colors.ENDC}")
+        else:
+            print(f"\n{Colors.OKCYAN}[*] Copia y pega las URLs en tu navegador para verificar resultados{Colors.ENDC}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Google Dork Scanner v2.1 - Enumeración Dinámica + GHDB',
+        description='Google Dork Scanner v2.2 - Subdominios REALES + Búsqueda Activa en Google',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Ejemplos de uso:
@@ -826,21 +836,23 @@ Ejemplos de uso:
   python3 dork_scanner.py -d example.com --offline
   python3 dork_scanner.py -d example.com --no-subdomain-gen
 
-IMPORTANTE v2.1:
-  - Enumeración DINÁMICA de subdominios (crt.sh, HackerTarget, AlienVault, ThreatCrowd)
-  - Fallback a 200+ prefijos comunes si APIs fallan
+IMPORTANTE v2.2:
+  - Subdominios REALES desde certificados (crt.sh, HackerTarget, AlienVault, ThreatCrowd)
+  - NO genera prefijos estáticos, solo subdominios reales de APIs
+  - BÚSQUEDA ACTIVA: Ejecuta búsquedas reales en Google y detecta resultados
+  - SOLO muestra dorks que retornaron resultados reales
   - 300+ Google Dorks de GHDB (Exploit-DB)
-  - Modo --offline disponible para uso sin APIs
-  - Genera URLs que debes abrir manualmente en el navegador
+  - Modo --offline disponible para generación de URLs sin búsqueda activa
 
 Advertencia:
   Use esta herramienta solo en dominios que posee o tiene permiso para probar.
+  La búsqueda activa puede tardar debido a delays anti-CAPTCHA (3-6s por dork).
         """
     )
 
     parser.add_argument('-d', '--domain', required=True, help='Dominio objetivo (ej: example.com)')
-    parser.add_argument('--no-subdomain-gen', action='store_true', help='Omitir generación de subdominios (solo dominio principal)')
-    parser.add_argument('--offline', action='store_true', help='Modo offline: solo usa prefijos comunes, no APIs')
+    parser.add_argument('--no-subdomain-gen', action='store_true', help='Omitir enumeración de subdominios (solo dominio principal)')
+    parser.add_argument('--offline', action='store_true', help='Modo offline: genera URLs pero NO ejecuta búsquedas en Google')
 
     args = parser.parse_args()
 
