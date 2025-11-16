@@ -177,14 +177,15 @@ class GoogleDorkScanner:
         return subdomains
 
     def print_banner(self):
-        mode = "OFFLINE" if self.offline else "ONLINE MEJORADO (Verificación 100% certera)"
+        mode = "OFFLINE" if self.offline else "ONLINE INTERACTIVO (Verificación 100% certera)"
         banner = f"""
 {Colors.OKCYAN}
 ╔═══════════════════════════════════════════════════════════╗
-║           Google Dork Scanner v2.3 MEJORADO               ║
-║           ✓ Subdominios REALES desde certificados         ║
+║           Google Dork Scanner v2.3 INTERACTIVO            ║
+║           ✓ Escaneo INTERACTIVO (pregunta por subdominio) ║
 ║           ✓ Verificación 100% CERTERA de resultados       ║
 ║           ✓ Extracción de títulos, URLs y snippets        ║
+║           ✓ Delays OPTIMIZADOS: 2-4s (rápido)             ║
 ║           ✓ Detección y manejo de CAPTCHA                 ║
 ║           ✓ Base de datos GHDB completa (300+ dorks)      ║
 ╚═══════════════════════════════════════════════════════════╝
@@ -835,110 +836,187 @@ class GoogleDorkScanner:
 
         print(f"{Colors.OKGREEN}Continuando escaneo...{Colors.ENDC}\n")
 
-    def scan_dorks(self):
-        """Escanea todos los dorks contra todos los subdominios y SOLO retorna los que tienen resultados"""
-        print(f"\n{Colors.HEADER}[*] Iniciando escaneo ACTIVO de Google Dorks...{Colors.ENDC}")
-
-        dorks = self.get_google_dorks_ghdb()
-        total_combinations = len(dorks) * len(self.subdomains)
-
-        print(f"{Colors.OKBLUE}[*] Total de dorks (GHDB): {len(dorks)}{Colors.ENDC}")
-        print(f"{Colors.OKBLUE}[*] Total de subdominios: {len(self.subdomains)}{Colors.ENDC}")
-        print(f"{Colors.OKBLUE}[*] Total de combinaciones: {total_combinations}{Colors.ENDC}")
-
-        if self.offline or not REQUESTS_AVAILABLE:
-            print(f"{Colors.WARNING}[!] Modo offline: Solo se generarán URLs (no se ejecutarán búsquedas){Colors.ENDC}\n")
-        else:
-            print(f"{Colors.OKGREEN}[✓] Modo ACTIVO MEJORADO: Verificación 100% certera de resultados{Colors.ENDC}")
-            print(f"{Colors.OKGREEN}[✓] Extracción de resultados reales (títulos, URLs, snippets){Colors.ENDC}")
-            print(f"{Colors.OKGREEN}[✓] Detección y manejo de CAPTCHA{Colors.ENDC}")
-            print(f"{Colors.WARNING}[!] Esto puede tomar tiempo. Se aplicarán delays para evitar CAPTCHA{Colors.ENDC}")
-            print(f"{Colors.WARNING}[!] Solo se mostrarán dorks con RESULTADOS 100% VERIFICADOS{Colors.ENDC}\n")
-
-        results_with_hits = []  # Solo dorks que tienen resultados
-        all_results = []  # Todas las combinaciones (para modo offline)
+    def scan_subdomain(self, subdomain: str, dorks: List[Dict], show_progress: bool = True) -> tuple:
+        """Escanea un subdominio específico con todos los dorks"""
+        results_with_hits = []
+        all_results = []
         counter = 0
         hits_found = 0
         captcha_encountered = 0
 
-        for subdomain in sorted(self.subdomains):
+        if show_progress:
             print(f"\n{Colors.OKCYAN}[*] Escaneando: {subdomain}{Colors.ENDC}")
+            print(f"{Colors.OKBLUE}[*] Total dorks: {len(dorks)}{Colors.ENDC}")
 
-            for dork_info in dorks:
-                counter += 1
-                category = dork_info['category']
-                dork = dork_info['dork']
+            if not self.offline and REQUESTS_AVAILABLE:
+                estimated_time = len(dorks) * 3  # ~3s promedio por dork
+                mins = estimated_time // 60
+                secs = estimated_time % 60
+                print(f"{Colors.WARNING}[!] Tiempo estimado: ~{mins}m {secs}s{Colors.ENDC}\n")
 
-                # Formatear dork
-                formatted_dork = dork.format(domain=subdomain)
-                search_url = f"https://www.google.com/search?q={quote_plus(formatted_dork)}"
+        for dork_info in dorks:
+            counter += 1
+            category = dork_info['category']
+            dork = dork_info['dork']
 
-                result = {
-                    'category': category,
-                    'dork': formatted_dork,
-                    'target': subdomain,
-                    'url': search_url,
-                    'timestamp': datetime.now().isoformat()
-                }
+            # Formatear dork
+            formatted_dork = dork.format(domain=subdomain)
+            search_url = f"https://www.google.com/search?q={quote_plus(formatted_dork)}"
 
-                # Modo OFFLINE: solo generar URLs
-                if self.offline or not REQUESTS_AVAILABLE:
-                    all_results.append(result)
-                    if counter % 50 == 0:
-                        progress = (counter / total_combinations) * 100
-                        print(f"  [{counter}/{total_combinations}] ({progress:.1f}%) generados...")
-                else:
-                    # Modo ONLINE: ejecutar búsqueda real con verificación mejorada
+            result = {
+                'category': category,
+                'dork': formatted_dork,
+                'target': subdomain,
+                'url': search_url,
+                'timestamp': datetime.now().isoformat()
+            }
+
+            # Modo OFFLINE: solo generar URLs
+            if self.offline or not REQUESTS_AVAILABLE:
+                all_results.append(result)
+                if show_progress and counter % 50 == 0:
+                    progress = (counter / len(dorks)) * 100
+                    print(f"  [{counter}/{len(dorks)}] ({progress:.1f}%) generados...")
+            else:
+                # Modo ONLINE: ejecutar búsqueda real con verificación mejorada
+                has_results, extracted_results, is_captcha = self.check_dork_has_results(search_url)
+
+                if is_captcha:
+                    captcha_encountered += 1
+                    print(f"  {Colors.FAIL}🤖 CAPTCHA detectado{Colors.ENDC}")
+                    self.handle_captcha(search_url)
+                    # Reintentar después de resolver CAPTCHA
                     has_results, extracted_results, is_captcha = self.check_dork_has_results(search_url)
 
-                    if is_captcha:
-                        captcha_encountered += 1
-                        print(f"  {Colors.FAIL}🤖 CAPTCHA detectado{Colors.ENDC}")
-                        self.handle_captcha(search_url)
-                        # Reintentar después de resolver CAPTCHA
-                        has_results, extracted_results, is_captcha = self.check_dork_has_results(search_url)
+                if has_results:
+                    result['has_results'] = True
+                    result['extracted_results'] = extracted_results
+                    result['results_count'] = len(extracted_results)
+                    results_with_hits.append(result)
+                    hits_found += 1
 
-                    if has_results:
-                        result['has_results'] = True
-                        result['extracted_results'] = extracted_results
-                        result['results_count'] = len(extracted_results)
-                        results_with_hits.append(result)
-                        hits_found += 1
+                    # Mostrar información del hit
+                    print(f"  {Colors.OKGREEN}✓ HIT [{hits_found}]{Colors.ENDC} {category}")
+                    print(f"    {Colors.OKCYAN}Dork: {formatted_dork[:70]}...{Colors.ENDC}")
+                    if extracted_results:
+                        print(f"    {Colors.OKGREEN}Resultados extraídos: {len(extracted_results)}{Colors.ENDC}")
+                        for idx, res in enumerate(extracted_results[:2], 1):  # Solo 2 para no saturar
+                            print(f"      {idx}. {res.get('title', 'Sin título')[:60]}")
+                            print(f"         {Colors.OKBLUE}{res.get('url', '')[:70]}{Colors.ENDC}")
+                        if len(extracted_results) > 2:
+                            print(f"      ... y {len(extracted_results) - 2} más")
 
-                        # Mostrar información del hit
-                        print(f"  {Colors.OKGREEN}✓ HIT [{hits_found}]{Colors.ENDC} {category}")
-                        print(f"    {Colors.OKCYAN}Dork: {formatted_dork[:70]}...{Colors.ENDC}")
-                        if extracted_results:
-                            print(f"    {Colors.OKGREEN}Resultados extraídos: {len(extracted_results)}{Colors.ENDC}")
-                            for idx, res in enumerate(extracted_results[:3], 1):
-                                print(f"      {idx}. {res.get('title', 'Sin título')[:60]}")
-                                print(f"         {Colors.OKBLUE}{res.get('url', '')[:70]}{Colors.ENDC}")
-                            if len(extracted_results) > 3:
-                                print(f"      ... y {len(extracted_results) - 3} más")
+                # Progress update cada 20 búsquedas
+                if show_progress and counter % 20 == 0:
+                    progress = (counter / len(dorks)) * 100
+                    print(f"  {Colors.OKBLUE}[{counter}/{len(dorks)}] ({progress:.1f}%) | Hits: {hits_found} | CAPTCHAs: {captcha_encountered}{Colors.ENDC}")
 
-                    # Progress update cada 10 búsquedas
-                    if counter % 10 == 0:
-                        progress = (counter / total_combinations) * 100
-                        print(f"  {Colors.OKBLUE}[{counter}/{total_combinations}] ({progress:.1f}%) | Hits: {hits_found} | CAPTCHAs: {captcha_encountered}{Colors.ENDC}")
+                # Delay dinámico: REDUCIDO para ser más rápido
+                if captcha_encountered > 0:
+                    delay = random.uniform(4, 7)  # Delays más largos si hay CAPTCHA
+                else:
+                    delay = random.uniform(2, 4)  # Delays normales REDUCIDOS
 
-                    # Delay dinámico: más largo si se han encontrado CAPTCHAs
-                    if captcha_encountered > 0:
-                        delay = random.uniform(6, 12)  # Delays más largos
-                    else:
-                        delay = random.uniform(4, 8)  # Delays normales
+                time.sleep(delay)
 
-                    time.sleep(delay)
+        return (results_with_hits if not self.offline else all_results, hits_found, captcha_encountered)
+
+    def scan_dorks(self):
+        """Escanea dorks de forma INTERACTIVA: primero dominio principal, luego pregunta por subdominios"""
+        print(f"\n{Colors.HEADER}[*] Iniciando escaneo ACTIVO de Google Dorks...{Colors.ENDC}")
+
+        dorks = self.get_google_dorks_ghdb()
+
+        print(f"{Colors.OKBLUE}[*] Total de dorks (GHDB): {len(dorks)}{Colors.ENDC}")
+        print(f"{Colors.OKBLUE}[*] Total de subdominios encontrados: {len(self.subdomains)}{Colors.ENDC}")
 
         if self.offline or not REQUESTS_AVAILABLE:
-            print(f"\n{Colors.OKGREEN}[+] Total URLs generadas: {len(all_results)}{Colors.ENDC}")
-            return all_results
+            print(f"{Colors.WARNING}[!] Modo offline: Solo se generarán URLs{Colors.ENDC}\n")
         else:
-            print(f"\n{Colors.OKGREEN}{'='*60}{Colors.ENDC}")
-            print(f"{Colors.OKGREEN}[+] Búsquedas completadas: {counter}{Colors.ENDC}")
-            print(f"{Colors.OKGREEN}[+] DORKS CON RESULTADOS VERIFICADOS: {hits_found}{Colors.ENDC}")
-            print(f"{Colors.WARNING}[+] CAPTCHAs encontrados: {captcha_encountered}{Colors.ENDC}")
-            print(f"{Colors.OKGREEN}{'='*60}{Colors.ENDC}\n")
-            return results_with_hits
+            print(f"{Colors.OKGREEN}[✓] Modo ACTIVO MEJORADO: Verificación 100% certera{Colors.ENDC}")
+            print(f"{Colors.OKGREEN}[✓] Extracción de resultados reales{Colors.ENDC}")
+            print(f"{Colors.OKGREEN}[✓] Escaneo INTERACTIVO: Pregunta por cada subdominio{Colors.ENDC}")
+            print(f"{Colors.WARNING}[!] Delays optimizados: 2-4s (rápido){Colors.ENDC}\n")
+
+        all_results = []
+        total_hits = 0
+        total_captchas = 0
+
+        # PASO 1: Escanear DOMINIO PRINCIPAL primero
+        main_domain = self.domain
+        if main_domain in self.subdomains:
+            print(f"\n{Colors.HEADER}{'='*60}{Colors.ENDC}")
+            print(f"{Colors.HEADER}PASO 1: ESCANEANDO DOMINIO PRINCIPAL{Colors.ENDC}")
+            print(f"{Colors.HEADER}{'='*60}{Colors.ENDC}")
+
+            results, hits, captchas = self.scan_subdomain(main_domain, dorks, show_progress=True)
+            all_results.extend(results)
+            total_hits += hits
+            total_captchas += captchas
+
+            print(f"\n{Colors.OKGREEN}[✓] Dominio principal completado: {hits} hits encontrados{Colors.ENDC}")
+
+        # PASO 2: Preguntar por cada SUBDOMINIO
+        other_subdomains = sorted([s for s in self.subdomains if s != main_domain])
+
+        if other_subdomains:
+            print(f"\n{Colors.HEADER}{'='*60}{Colors.ENDC}")
+            print(f"{Colors.HEADER}PASO 2: SUBDOMINIOS ENCONTRADOS ({len(other_subdomains)}){Colors.ENDC}")
+            print(f"{Colors.HEADER}{'='*60}{Colors.ENDC}")
+            print(f"{Colors.OKCYAN}Se preguntará por cada subdominio individualmente{Colors.ENDC}\n")
+
+            for idx, subdomain in enumerate(other_subdomains, 1):
+                print(f"\n{Colors.OKCYAN}{'─'*60}{Colors.ENDC}")
+                print(f"{Colors.OKCYAN}Subdominio [{idx}/{len(other_subdomains)}]: {subdomain}{Colors.ENDC}")
+                print(f"{Colors.OKCYAN}{'─'*60}{Colors.ENDC}")
+
+                if not self.offline and REQUESTS_AVAILABLE:
+                    estimated_time = len(dorks) * 3
+                    mins = estimated_time // 60
+                    secs = estimated_time % 60
+                    print(f"{Colors.WARNING}Tiempo estimado: ~{mins}m {secs}s{Colors.ENDC}")
+
+                print(f"\n{Colors.WARNING}¿Escanear este subdominio?{Colors.ENDC}")
+                print(f"  {Colors.OKGREEN}s{Colors.ENDC} - Sí, escanear")
+                print(f"  {Colors.FAIL}n{Colors.ENDC} - No, saltar")
+                print(f"  {Colors.FAIL}a{Colors.ENDC} - Abortar escaneo completo")
+                print(f"  {Colors.OKCYAN}t{Colors.ENDC} - Escanear TODOS los restantes sin preguntar")
+
+                choice = input(f"\n{Colors.OKCYAN}Opción (s/n/a/t): {Colors.ENDC}").strip().lower()
+
+                if choice == 'a':
+                    print(f"{Colors.FAIL}[!] Escaneo abortado por el usuario{Colors.ENDC}")
+                    break
+                elif choice == 't':
+                    print(f"{Colors.OKGREEN}[✓] Escaneando todos los subdominios restantes...{Colors.ENDC}")
+                    # Escanear este y todos los restantes
+                    for remaining_subdomain in other_subdomains[idx-1:]:
+                        results, hits, captchas = self.scan_subdomain(remaining_subdomain, dorks, show_progress=True)
+                        all_results.extend(results)
+                        total_hits += hits
+                        total_captchas += captchas
+                        print(f"{Colors.OKGREEN}[✓] {remaining_subdomain}: {hits} hits{Colors.ENDC}")
+                    break
+                elif choice == 's' or choice == 'y' or choice == '':
+                    results, hits, captchas = self.scan_subdomain(subdomain, dorks, show_progress=True)
+                    all_results.extend(results)
+                    total_hits += hits
+                    total_captchas += captchas
+                    print(f"\n{Colors.OKGREEN}[✓] Completado: {hits} hits encontrados{Colors.ENDC}")
+                else:
+                    print(f"{Colors.WARNING}[!] Subdominio saltado{Colors.ENDC}")
+                    continue
+
+        # RESUMEN FINAL
+        print(f"\n{Colors.OKGREEN}{'='*60}{Colors.ENDC}")
+        print(f"{Colors.OKGREEN}ESCANEO COMPLETADO{Colors.ENDC}")
+        print(f"{Colors.OKGREEN}{'='*60}{Colors.ENDC}")
+        print(f"{Colors.OKGREEN}[+] Total HITS encontrados: {total_hits}{Colors.ENDC}")
+        print(f"{Colors.WARNING}[+] Total CAPTCHAs: {total_captchas}{Colors.ENDC}")
+        print(f"{Colors.OKBLUE}[+] Dominios escaneados: {len(set([r['target'] for r in all_results]))}{Colors.ENDC}")
+        print(f"{Colors.OKGREEN}{'='*60}{Colors.ENDC}\n")
+
+        return all_results
 
     def generate_report(self, results: List[Dict]):
         """Genera reporte de resultados - SOLO muestra resultados con HITS en modo online"""
@@ -1080,7 +1158,7 @@ class GoogleDorkScanner:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Google Dork Scanner v2.3 MEJORADO - Verificación 100% certera de resultados',
+        description='Google Dork Scanner v2.3 INTERACTIVO - Verificación 100% certera + Escaneo inteligente',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Ejemplos de uso:
@@ -1088,12 +1166,24 @@ Ejemplos de uso:
   python3 dork_scanner.py -d example.com --offline
   python3 dork_scanner.py -d example.com --no-subdomain-gen
 
-NUEVO EN v2.3 - MEJORAS IMPORTANTES:
+NUEVO EN v2.3 - MEJORAS CRÍTICAS:
+  ✓ ESCANEO INTERACTIVO: Primero escanea dominio principal, luego pregunta por subdominios
+  ✓ CONTROL TOTAL: Opción de abortar, saltar o escanear todos en cualquier momento
+  ✓ DELAYS OPTIMIZADOS: 2-4s (antes 4-12s) - Mucho más RÁPIDO
   ✓ VERIFICACIÓN 100% CERTERA: Solo muestra dorks con resultados REALES verificados
   ✓ EXTRACCIÓN DE RESULTADOS: Títulos, URLs y snippets de cada resultado
   ✓ DETECCIÓN DE CAPTCHA: Detecta y permite resolver CAPTCHAs manualmente
-  ✓ ANTI-DETECCIÓN MEJORADA: Headers realistas, delays dinámicos, múltiples user-agents
-  ✓ ARCHIVO DE URLS EXTRAÍDAS: Archivo especial con URLs encontradas listas para analizar
+  ✓ ESTIMACIÓN DE TIEMPO: Muestra tiempo estimado antes de escanear cada subdominio
+
+Flujo de escaneo:
+  1. Escanea el dominio principal automáticamente
+  2. Lista todos los subdominios encontrados
+  3. Pregunta UNO POR UNO si quieres escanear cada subdominio
+  4. Opciones por subdominio:
+     - 's' = Sí, escanear este subdominio
+     - 'n' = No, saltar este subdominio
+     - 'a' = Abortar escaneo completo
+     - 't' = Escanear TODOS los restantes sin preguntar
 
 Características principales:
   - Subdominios REALES desde certificados (crt.sh, HackerTarget, AlienVault, ThreatCrowd)
@@ -1105,16 +1195,20 @@ Archivos generados:
   1. dork_scan_*.json - Reporte completo en JSON con resultados extraídos
   2. dork_scan_*.txt - Reporte detallado con todos los hallazgos
   3. dork_urls_*.txt - URLs de búsqueda de Google verificadas
-  4. dork_extracted_urls_*.txt - URLs REALES extraídas de Google (¡NUEVO!)
+  4. dork_extracted_urls_*.txt - URLs REALES extraídas de Google
 
-Dependencias opcionales:
+Dependencias:
   - requests: Para búsquedas online (requerido para modo activo)
   - beautifulsoup4: Para extracción mejorada de resultados (recomendado)
   Instalar: pip install requests beautifulsoup4
 
+Tiempo estimado:
+  - Dominio principal: ~15 minutos (300 dorks × 3s promedio)
+  - Por subdominio: ~15 minutos cada uno
+  - Total depende de cuántos subdominios elijas escanear
+
 Advertencia:
   Use esta herramienta solo en dominios que posee o tiene permiso para probar.
-  La búsqueda activa puede tardar debido a delays anti-CAPTCHA (4-12s por dork).
         """
     )
 
