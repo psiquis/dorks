@@ -875,86 +875,87 @@ class GoogleDorkScanner:
 
         # Separar dominio principal de subdominios
         main_domain = self.domain
+        # Asegurar que el dominio principal siempre se añade
+        if main_domain not in self.subdomains:
+            self.subdomains.add(main_domain)
+
         other_subdomains = sorted([s for s in self.subdomains if s != main_domain])
 
-        # PASO 1: Escanear DOMINIO PRINCIPAL
+        # PASO 1: Escanear DOMINIO PRINCIPAL (siempre)
         print(f"\n{Colors.HEADER}{'='*60}{Colors.ENDC}")
         print(f"{Colors.HEADER}PASO 1: DOMINIO PRINCIPAL{Colors.ENDC}")
         print(f"{Colors.HEADER}{'='*60}{Colors.ENDC}")
 
-        domains_to_scan = [main_domain] if main_domain in self.subdomains else []
+        print(f"\n{Colors.OKCYAN}[*] Escaneando: {main_domain}{Colors.ENDC}")
+        print(f"{Colors.OKBLUE}[*] Total dorks: {len(dorks)}{Colors.ENDC}")
+        if not self.offline and REQUESTS_AVAILABLE:
+            estimated_mins = (len(dorks) * 3) // 60
+            print(f"{Colors.WARNING}[!] Tiempo estimado: ~{estimated_mins} minutos{Colors.ENDC}\n")
 
-        for subdomain in domains_to_scan:
-            print(f"\n{Colors.OKCYAN}[*] Escaneando: {subdomain}{Colors.ENDC}")
-            print(f"{Colors.OKBLUE}[*] Total dorks: {len(dorks)}{Colors.ENDC}")
-            if not self.offline and REQUESTS_AVAILABLE:
-                estimated_mins = (len(dorks) * 3) // 60
-                print(f"{Colors.WARNING}[!] Tiempo estimado: ~{estimated_mins} minutos{Colors.ENDC}\n")
+        for dork_info in dorks:
+            counter += 1
+            category = dork_info['category']
+            dork = dork_info['dork']
 
-            for dork_info in dorks:
-                counter += 1
-                category = dork_info['category']
-                dork = dork_info['dork']
+            # Formatear dork
+            formatted_dork = dork.format(domain=main_domain)
+            search_url = f"https://www.google.com/search?q={quote_plus(formatted_dork)}"
 
-                # Formatear dork
-                formatted_dork = dork.format(domain=subdomain)
-                search_url = f"https://www.google.com/search?q={quote_plus(formatted_dork)}"
+            result = {
+                'category': category,
+                'dork': formatted_dork,
+                'target': main_domain,
+                'url': search_url,
+                'timestamp': datetime.now().isoformat()
+            }
 
-                result = {
-                    'category': category,
-                    'dork': formatted_dork,
-                    'target': subdomain,
-                    'url': search_url,
-                    'timestamp': datetime.now().isoformat()
-                }
+            # Modo OFFLINE: solo generar URLs
+            if self.offline or not REQUESTS_AVAILABLE:
+                all_results.append(result)
+                if counter % 50 == 0:
+                    progress = (counter / len(dorks)) * 100
+                    print(f"  [{counter}/{len(dorks)}] ({progress:.1f}%) generados...")
+            else:
+                # Modo ONLINE: ejecutar búsqueda real con verificación mejorada
+                has_results, extracted_results, is_captcha = self.check_dork_has_results(search_url)
 
-                # Modo OFFLINE: solo generar URLs
-                if self.offline or not REQUESTS_AVAILABLE:
-                    all_results.append(result)
-                    if counter % 50 == 0:
-                        progress = (counter / total_combinations) * 100
-                        print(f"  [{counter}/{total_combinations}] ({progress:.1f}%) generados...")
-                else:
-                    # Modo ONLINE: ejecutar búsqueda real con verificación mejorada
+                if is_captcha:
+                    captcha_encountered += 1
+                    print(f"  {Colors.FAIL}🤖 CAPTCHA detectado{Colors.ENDC}")
+                    self.handle_captcha(search_url)
+                    # Reintentar después de resolver CAPTCHA
                     has_results, extracted_results, is_captcha = self.check_dork_has_results(search_url)
 
-                    if is_captcha:
-                        captcha_encountered += 1
-                        print(f"  {Colors.FAIL}🤖 CAPTCHA detectado{Colors.ENDC}")
-                        self.handle_captcha(search_url)
-                        # Reintentar después de resolver CAPTCHA
-                        has_results, extracted_results, is_captcha = self.check_dork_has_results(search_url)
+                if has_results:
+                    result['has_results'] = True
+                    result['extracted_results'] = extracted_results
+                    result['results_count'] = len(extracted_results)
+                    results_with_hits.append(result)
+                    hits_found += 1
 
-                    if has_results:
-                        result['has_results'] = True
-                        result['extracted_results'] = extracted_results
-                        result['results_count'] = len(extracted_results)
-                        results_with_hits.append(result)
-                        hits_found += 1
+                    # Mostrar información del hit
+                    print(f"  {Colors.OKGREEN}✓ HIT [{hits_found}]{Colors.ENDC} {category}")
+                    print(f"    {Colors.OKCYAN}Dork: {formatted_dork[:70]}...{Colors.ENDC}")
+                    if extracted_results:
+                        print(f"    {Colors.OKGREEN}Resultados extraídos: {len(extracted_results)}{Colors.ENDC}")
+                        for idx, res in enumerate(extracted_results[:3], 1):
+                            print(f"      {idx}. {res.get('title', 'Sin título')[:60]}")
+                            print(f"         {Colors.OKBLUE}{res.get('url', '')[:70]}{Colors.ENDC}")
+                        if len(extracted_results) > 3:
+                            print(f"      ... y {len(extracted_results) - 3} más")
 
-                        # Mostrar información del hit
-                        print(f"  {Colors.OKGREEN}✓ HIT [{hits_found}]{Colors.ENDC} {category}")
-                        print(f"    {Colors.OKCYAN}Dork: {formatted_dork[:70]}...{Colors.ENDC}")
-                        if extracted_results:
-                            print(f"    {Colors.OKGREEN}Resultados extraídos: {len(extracted_results)}{Colors.ENDC}")
-                            for idx, res in enumerate(extracted_results[:3], 1):
-                                print(f"      {idx}. {res.get('title', 'Sin título')[:60]}")
-                                print(f"         {Colors.OKBLUE}{res.get('url', '')[:70]}{Colors.ENDC}")
-                            if len(extracted_results) > 3:
-                                print(f"      ... y {len(extracted_results) - 3} más")
+                # Progress update cada 20 búsquedas
+                if counter % 20 == 0:
+                    progress = (counter / len(dorks)) * 100
+                    print(f"  {Colors.OKBLUE}[{counter}/{len(dorks)}] ({progress:.1f}%) | Hits: {hits_found} | CAPTCHAs: {captcha_encountered}{Colors.ENDC}")
 
-                    # Progress update cada 20 búsquedas
-                    if counter % 20 == 0:
-                        progress = (counter / len(dorks)) * 100
-                        print(f"  {Colors.OKBLUE}[{counter}/{len(dorks)}] ({progress:.1f}%) | Hits: {hits_found} | CAPTCHAs: {captcha_encountered}{Colors.ENDC}")
+                # Delay dinámico: OPTIMIZADO más rápido
+                if captcha_encountered > 0:
+                    delay = random.uniform(5, 8)  # Delays más largos si CAPTCHA
+                else:
+                    delay = random.uniform(2, 4)  # Delays RÁPIDOS
 
-                    # Delay dinámico: OPTIMIZADO más rápido
-                    if captcha_encountered > 0:
-                        delay = random.uniform(5, 8)  # Delays más largos si CAPTCHA
-                    else:
-                        delay = random.uniform(2, 4)  # Delays RÁPIDOS
-
-                    time.sleep(delay)
+                time.sleep(delay)
 
         # Resumen dominio principal
         print(f"\n{Colors.OKGREEN}[✓] Dominio principal completado: {hits_found} hits encontrados{Colors.ENDC}")
