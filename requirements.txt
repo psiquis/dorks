@@ -1,1 +1,3 @@
-requests>=2.31.0
+# Google Dork Scanner v2.0
+# 100% Offline - Sin dependencias externas
+# No se requieren librerías adicionales - Solo Python 3.6+
