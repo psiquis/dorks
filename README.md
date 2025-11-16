@@ -18,10 +18,13 @@ El autor no se hace responsable del uso indebido de esta herramienta.
 
 ## 🚀 Características
 
-- **Enumeración automática de subdominios** usando múltiples fuentes:
-  - crt.sh (certificados SSL/TLS)
-  - HackerTarget API
-  - Lista de prefijos comunes
+- **Enumeración automática de subdominios** usando múltiples fuentes **GRATUITAS y SIN API KEYS**:
+  - **crt.sh** - Certificados SSL/TLS públicos
+  - **HackerTarget** - API gratuita (puede tener rate limits)
+  - **AlienVault OTX** - Passive DNS (gratuito, sin autenticación)
+  - **ThreatCrowd** - Threat intelligence (gratuito, sin autenticación)
+  - **Prefijos Comunes** - 90+ prefijos comunes expandidos
+  - ✅ **Manejo robusto de errores** - Continúa aunque algunas fuentes fallen
 
 - **Base de datos exhaustiva de Google Dorks** que incluye:
   - Archivos sensibles (configs, backups, logs)
@@ -198,6 +201,53 @@ Siempre verifica manualmente:
 - **Cambios en Google**: La estructura HTML de Google puede cambiar
 - **APIs Externas**: La enumeración de subdominios depende de servicios de terceros
 
+## 📡 Fuentes de Subdominios - Información Detallada
+
+### ✅ Fuentes que NO requieren API Key
+
+1. **crt.sh**
+   - Fuente: Certificados SSL/TLS públicos
+   - Confiabilidad: ⭐⭐⭐⭐⭐ (Muy alta)
+   - Requiere: Nada
+   - Si falla: El programa continúa con las otras fuentes
+
+2. **AlienVault OTX**
+   - Fuente: Passive DNS database
+   - Confiabilidad: ⭐⭐⭐⭐ (Alta)
+   - Requiere: Nada (sin autenticación)
+   - Si falla: El programa continúa con las otras fuentes
+
+3. **ThreatCrowd**
+   - Fuente: Threat intelligence
+   - Confiabilidad: ⭐⭐⭐ (Media)
+   - Requiere: Nada (sin autenticación)
+   - Si falla: El programa continúa con las otras fuentes
+
+4. **HackerTarget**
+   - Fuente: DNS database
+   - Confiabilidad: ⭐⭐⭐ (Media - tiene rate limits)
+   - Requiere: Nada (API gratuita sin key)
+   - Limitación: 100 búsquedas por día por IP
+   - Si alcanzas el límite: Muestra advertencia pero continúa
+
+5. **Prefijos Comunes**
+   - Fuente: Lista de 90+ prefijos comunes
+   - Confiabilidad: ⭐⭐⭐⭐ (Alta - siempre disponible)
+   - Requiere: Nada
+   - Nunca falla: Genera subdominios localmente
+
+### 🔄 Qué hace el programa si una fuente falla
+
+El programa está diseñado para ser **robusto ante fallos**:
+
+- ✅ Si **crt.sh** no está disponible → Muestra advertencia y continúa con las demás fuentes
+- ✅ Si **HackerTarget** alcanzó el rate limit → Muestra advertencia y continúa
+- ✅ Si **AlienVault** falla → Muestra advertencia y continúa
+- ✅ Si **ThreatCrowd** falla → Muestra advertencia y continúa
+- ✅ **Prefijos Comunes** → Siempre funciona (no depende de APIs externas)
+
+**Resultado:** Siempre tendrás al menos la lista de prefijos comunes, asegurando que el programa **nunca falle completamente** en la enumeración de subdominios.
+
 ## 🔧 Troubleshooting
 
 ### "No se encontraron subdominios"
@@ -236,10 +286,22 @@ Las contribuciones son bienvenidas:
 
 ## 📝 Changelog
 
+### v1.1 (2025-11-16)
+- ✨ **Mejora mayor**: Sin dependencia de API keys
+- ✨ Agregadas 2 nuevas fuentes de subdominios:
+  - AlienVault OTX (Passive DNS)
+  - ThreatCrowd (Threat Intelligence)
+- ✨ Expandida lista de prefijos comunes de 30 a 90+
+- ✨ Manejo robusto de errores - continúa aunque APIs fallen
+- ✨ Mejores mensajes de error informativos
+- ✨ Validación y limpieza mejorada de subdominios
+- ✨ Indicadores visuales de estado por fuente (✓/⚠)
+- 📖 Documentación expandida sobre fuentes de datos
+
 ### v1.0 (2025-11-16)
 - Versión inicial
 - 80+ Google Dorks
-- Enumeración de subdominios múltiple
+- Enumeración de subdominios múltiple (crt.sh, HackerTarget, Common)
 - Reportes JSON y TXT
 - Anti-detección básica
 

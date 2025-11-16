@@ -48,12 +48,14 @@ class GoogleDorkScanner:
         banner = f"""
 {Colors.OKCYAN}
 ╔═══════════════════════════════════════════════════════════╗
-║           Google Dork Scanner v1.0                        ║
+║           Google Dork Scanner v1.1                        ║
 ║           Automated Reconnaissance Tool                    ║
+║           Mejorado - Sin dependencia de API keys          ║
 ╚═══════════════════════════════════════════════════════════╝
 {Colors.ENDC}
 {Colors.WARNING}[!] Use this tool only on domains you own or have permission to test{Colors.ENDC}
 {Colors.OKBLUE}[*] Target Domain: {self.domain}{Colors.ENDC}
+{Colors.OKBLUE}[*] Fuentes de subdominios: crt.sh, HackerTarget, AlienVault, ThreatCrowd, Common{Colors.ENDC}
 """
         print(banner)
 
@@ -69,8 +71,8 @@ class GoogleDorkScanner:
         }
 
     def enumerate_subdomains_crtsh(self) -> Set[str]:
-        """Enumera subdominios usando crt.sh"""
-        print(f"{Colors.OKBLUE}[*] Enumerando subdominios via crt.sh...{Colors.ENDC}")
+        """Enumera subdominios usando crt.sh (certificados SSL públicos)"""
+        print(f"{Colors.OKBLUE}[*] Enumerando subdominios via crt.sh...{Colors.ENDC}", end=' ')
         subdomains = set()
         try:
             url = f"https://crt.sh/?q=%.{self.domain}&output=json"
@@ -83,73 +85,198 @@ class GoogleDorkScanner:
                         # Puede haber múltiples nombres separados por \n
                         for subdomain in name.split('\n'):
                             subdomain = subdomain.strip().lower()
-                            if subdomain.endswith(self.domain):
+                            # Limpiar wildcards
+                            subdomain = subdomain.replace('*.', '')
+                            if subdomain.endswith(self.domain) and subdomain:
                                 subdomains.add(subdomain)
+                print(f"{Colors.OKGREEN}✓ {len(subdomains)} encontrados{Colors.ENDC}")
+            else:
+                print(f"{Colors.WARNING}⚠ No disponible (status {response.status_code}){Colors.ENDC}")
         except Exception as e:
-            print(f"{Colors.FAIL}[!] Error en crt.sh: {str(e)}{Colors.ENDC}")
+            print(f"{Colors.WARNING}⚠ Error: {str(e)[:50]}{Colors.ENDC}")
 
         return subdomains
 
     def enumerate_subdomains_hackertarget(self) -> Set[str]:
-        """Enumera subdominios usando HackerTarget API"""
-        print(f"{Colors.OKBLUE}[*] Enumerando subdominios via HackerTarget...{Colors.ENDC}")
+        """Enumera subdominios usando HackerTarget API (gratuita, sin auth)"""
+        print(f"{Colors.OKBLUE}[*] Enumerando subdominios via HackerTarget...{Colors.ENDC}", end=' ')
         subdomains = set()
         try:
             url = f"https://api.hackertarget.com/hostsearch/?q={self.domain}"
             response = requests.get(url, timeout=30)
             if response.status_code == 200:
                 lines = response.text.split('\n')
+                # Verificar si hay error de rate limit
+                if 'error' in response.text.lower() or 'quota' in response.text.lower():
+                    print(f"{Colors.WARNING}⚠ API rate limit alcanzado{Colors.ENDC}")
+                    return subdomains
+
                 for line in lines:
                     if ',' in line:
                         subdomain = line.split(',')[0].strip().lower()
                         if subdomain and subdomain.endswith(self.domain):
                             subdomains.add(subdomain)
+                print(f"{Colors.OKGREEN}✓ {len(subdomains)} encontrados{Colors.ENDC}")
+            else:
+                print(f"{Colors.WARNING}⚠ No disponible (status {response.status_code}){Colors.ENDC}")
         except Exception as e:
-            print(f"{Colors.FAIL}[!] Error en HackerTarget: {str(e)}{Colors.ENDC}")
+            print(f"{Colors.WARNING}⚠ Error: {str(e)[:50]}{Colors.ENDC}")
 
         return subdomains
 
-    def enumerate_subdomains_dnsdumpster(self) -> Set[str]:
-        """Enumera subdominios usando búsqueda directa"""
-        print(f"{Colors.OKBLUE}[*] Enumerando subdominios via búsqueda directa...{Colors.ENDC}")
+    def enumerate_subdomains_common(self) -> Set[str]:
+        """Genera lista de subdominios usando prefijos comunes"""
+        print(f"{Colors.OKBLUE}[*] Generando subdominios comunes...{Colors.ENDC}", end=' ')
         subdomains = set()
 
-        # Prefijos comunes de subdominios
+        # Prefijos comunes de subdominios (expandido)
         common_prefixes = [
-            'www', 'mail', 'ftp', 'webmail', 'smtp', 'pop', 'ns1', 'ns2',
-            'webdisk', 'ns', 'news', 'test', 'dev', 'staging', 'beta',
-            'api', 'admin', 'portal', 'vpn', 'remote', 'blog', 'shop',
-            'store', 'secure', 'login', 'git', 'gitlab', 'github', 'jenkins',
-            'jira', 'confluence', 'wiki', 'docs', 'help', 'support', 'forum',
-            'dashboard', 'panel', 'cpanel', 'whm', 'cloud', 'mobile', 'm'
+            'www', 'mail', 'ftp', 'webmail', 'smtp', 'pop', 'pop3', 'imap',
+            'webdisk', 'ns', 'ns1', 'ns2', 'ns3', 'ns4', 'dns', 'dns1', 'dns2',
+            'email', 'mx', 'mx1', 'mx2',
+            'news', 'test', 'dev', 'development', 'staging', 'stage', 'beta', 'alpha',
+            'api', 'api-dev', 'api-staging', 'api-prod', 'api1', 'api2',
+            'admin', 'administrator', 'portal', 'dashboard', 'panel',
+            'vpn', 'remote', 'access', 'citrix',
+            'blog', 'shop', 'store', 'ecommerce', 'cart',
+            'secure', 'login', 'signin', 'signup', 'auth', 'authentication',
+            'git', 'gitlab', 'github', 'bitbucket', 'svn',
+            'jenkins', 'ci', 'cd', 'build',
+            'jira', 'confluence', 'wiki', 'docs', 'documentation', 'help', 'support',
+            'forum', 'community', 'chat',
+            'cpanel', 'whm', 'plesk', 'directadmin',
+            'cloud', 'aws', 'azure', 'gcp',
+            'mobile', 'm', 'app', 'apps',
+            'static', 'assets', 'cdn', 'media', 'images', 'img', 'upload', 'uploads',
+            'ftp', 'sftp', 'files', 'download', 'downloads',
+            'db', 'database', 'sql', 'mysql', 'postgres', 'mongo',
+            'backup', 'backups', 'old', 'new',
+            'legacy', 'v1', 'v2', 'v3', 'version1', 'version2',
+            'demo', 'sandbox', 'lab', 'labs',
+            'monitoring', 'monitor', 'grafana', 'prometheus', 'kibana',
+            'status', 'health', 'metrics',
+            'payments', 'pay', 'checkout', 'billing',
+            'crm', 'erp', 'hr', 'finance',
+            'intranet', 'internal', 'corp', 'corporate',
+            'extranet', 'partner', 'partners', 'vendor', 'vendors'
         ]
 
         for prefix in common_prefixes:
             subdomain = f"{prefix}.{self.domain}"
             subdomains.add(subdomain)
 
+        print(f"{Colors.OKGREEN}✓ {len(subdomains)} generados{Colors.ENDC}")
+        return subdomains
+
+    def enumerate_subdomains_alienvault(self) -> Set[str]:
+        """Enumera subdominios usando AlienVault OTX (gratuito, sin auth)"""
+        print(f"{Colors.OKBLUE}[*] Enumerando subdominios via AlienVault OTX...{Colors.ENDC}", end=' ')
+        subdomains = set()
+        try:
+            url = f"https://otx.alienvault.com/api/v1/indicators/domain/{self.domain}/passive_dns"
+            headers = self.get_random_headers()
+            response = requests.get(url, headers=headers, timeout=30)
+
+            if response.status_code == 200:
+                data = response.json()
+                passive_dns = data.get('passive_dns', [])
+                for record in passive_dns:
+                    hostname = record.get('hostname', '').lower()
+                    if hostname and hostname.endswith(self.domain):
+                        subdomains.add(hostname)
+                print(f"{Colors.OKGREEN}✓ {len(subdomains)} encontrados{Colors.ENDC}")
+            else:
+                print(f"{Colors.WARNING}⚠ No disponible (status {response.status_code}){Colors.ENDC}")
+        except Exception as e:
+            print(f"{Colors.WARNING}⚠ Error: {str(e)[:50]}{Colors.ENDC}")
+
+        return subdomains
+
+    def enumerate_subdomains_threatcrowd(self) -> Set[str]:
+        """Enumera subdominios usando ThreatCrowd (gratuito, sin auth)"""
+        print(f"{Colors.OKBLUE}[*] Enumerando subdominios via ThreatCrowd...{Colors.ENDC}", end=' ')
+        subdomains = set()
+        try:
+            url = f"https://www.threatcrowd.org/searchApi/v2/domain/report/?domain={self.domain}"
+            response = requests.get(url, timeout=30)
+
+            if response.status_code == 200:
+                data = response.json()
+                subdomain_list = data.get('subdomains', [])
+                for subdomain in subdomain_list:
+                    subdomain = subdomain.lower().strip()
+                    if subdomain and subdomain.endswith(self.domain):
+                        subdomains.add(subdomain)
+                print(f"{Colors.OKGREEN}✓ {len(subdomains)} encontrados{Colors.ENDC}")
+            else:
+                print(f"{Colors.WARNING}⚠ No disponible (status {response.status_code}){Colors.ENDC}")
+        except Exception as e:
+            print(f"{Colors.WARNING}⚠ Error: {str(e)[:50]}{Colors.ENDC}")
+
         return subdomains
 
     def enumerate_all_subdomains(self) -> Set[str]:
-        """Enumera subdominios usando múltiples fuentes"""
+        """Enumera subdominios usando múltiples fuentes (todas gratuitas y sin API key)"""
+        print(f"\n{Colors.HEADER}[*] Iniciando enumeración de subdominios...{Colors.ENDC}\n")
+
         all_subdomains = set()
         all_subdomains.add(self.domain)  # Agregar el dominio principal
 
-        # crt.sh
-        all_subdomains.update(self.enumerate_subdomains_crtsh())
-        time.sleep(1)
+        # Fuente 1: crt.sh (certificados SSL públicos)
+        try:
+            subs = self.enumerate_subdomains_crtsh()
+            all_subdomains.update(subs)
+            time.sleep(2)
+        except Exception as e:
+            print(f"{Colors.FAIL}[!] Error crítico en crt.sh: {str(e)}{Colors.ENDC}")
 
-        # HackerTarget
-        all_subdomains.update(self.enumerate_subdomains_hackertarget())
-        time.sleep(1)
+        # Fuente 2: HackerTarget (API gratuita sin auth, puede tener límites)
+        try:
+            subs = self.enumerate_subdomains_hackertarget()
+            all_subdomains.update(subs)
+            time.sleep(2)
+        except Exception as e:
+            print(f"{Colors.FAIL}[!] Error crítico en HackerTarget: {str(e)}{Colors.ENDC}")
 
-        # Búsqueda directa
-        all_subdomains.update(self.enumerate_subdomains_dnsdumpster())
+        # Fuente 3: AlienVault OTX (gratuito, sin auth)
+        try:
+            subs = self.enumerate_subdomains_alienvault()
+            all_subdomains.update(subs)
+            time.sleep(2)
+        except Exception as e:
+            print(f"{Colors.FAIL}[!] Error crítico en AlienVault: {str(e)}{Colors.ENDC}")
 
-        self.subdomains = all_subdomains
-        print(f"{Colors.OKGREEN}[+] Total subdominios encontrados: {len(self.subdomains)}{Colors.ENDC}")
+        # Fuente 4: ThreatCrowd (gratuito, sin auth)
+        try:
+            subs = self.enumerate_subdomains_threatcrowd()
+            all_subdomains.update(subs)
+            time.sleep(2)
+        except Exception as e:
+            print(f"{Colors.FAIL}[!] Error crítico en ThreatCrowd: {str(e)}{Colors.ENDC}")
 
-        return all_subdomains
+        # Fuente 5: Prefijos comunes (siempre disponible, no depende de APIs)
+        try:
+            subs = self.enumerate_subdomains_common()
+            all_subdomains.update(subs)
+        except Exception as e:
+            print(f"{Colors.FAIL}[!] Error crítico en generación común: {str(e)}{Colors.ENDC}")
+
+        # Limpiar subdominios inválidos
+        valid_subdomains = set()
+        for subdomain in all_subdomains:
+            # Limpiar wildcards y caracteres extraños
+            subdomain = subdomain.replace('*.', '').strip()
+            # Validar que es un subdominio válido
+            if subdomain and '.' in subdomain and subdomain.endswith(self.domain):
+                valid_subdomains.add(subdomain)
+
+        self.subdomains = valid_subdomains
+
+        print(f"\n{Colors.OKGREEN}{'='*60}{Colors.ENDC}")
+        print(f"{Colors.OKGREEN}[+] Total subdominios únicos encontrados: {len(self.subdomains)}{Colors.ENDC}")
+        print(f"{Colors.OKGREEN}{'='*60}{Colors.ENDC}\n")
+
+        return valid_subdomains
 
     def get_google_dorks(self) -> List[Dict]:
         """Retorna lista completa de Google Dorks categorizados"""
