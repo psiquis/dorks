@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Google Dork Scanner v2.0 - Herramienta de reconocimiento automatizado
-100% OFFLINE - Sin APIs externas
-Base de datos completa de Google Dorks basada en GHDB (Exploit-DB)
+Google Dork Scanner v2.1 - Herramienta de reconocimiento automatizado
+Enumeración dinámica de subdominios + 300+ Google Dorks de GHDB
 """
 
 import argparse
@@ -14,6 +13,13 @@ from urllib.parse import quote_plus, urlparse
 from datetime import datetime
 from typing import List, Dict, Set
 import re
+
+# Intentar importar requests (opcional para APIs)
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
 
 # Colores para terminal
 class Colors:
@@ -29,34 +35,185 @@ class Colors:
 
 
 class GoogleDorkScanner:
-    def __init__(self, domain: str, delay: int = 2):
+    def __init__(self, domain: str, delay: int = 2, offline: bool = False):
         self.domain = domain
         self.delay = delay
+        self.offline = offline
         self.subdomains = set()
         self.results = []
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
+
+    def get_random_headers(self) -> Dict:
+        return {
+            'User-Agent': random.choice(self.user_agents),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+        }
+
+    def enumerate_subdomains_crtsh(self) -> Set[str]:
+        """Enumera subdominios usando crt.sh (certificados SSL públicos)"""
+        if not REQUESTS_AVAILABLE:
+            return set()
+
+        print(f"{Colors.OKBLUE}[*] crt.sh...{Colors.ENDC}", end=' ', flush=True)
+        subdomains = set()
+        try:
+            url = f"https://crt.sh/?q=%.{self.domain}&output=json"
+            response = requests.get(url, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                for entry in data:
+                    name = entry.get('name_value', '')
+                    if name:
+                        for subdomain in name.split('\n'):
+                            subdomain = subdomain.strip().lower().replace('*.', '')
+                            if subdomain and subdomain.endswith(self.domain):
+                                subdomains.add(subdomain)
+                print(f"{Colors.OKGREEN}✓ {len(subdomains)}{Colors.ENDC}")
+            else:
+                print(f"{Colors.WARNING}⚠{Colors.ENDC}")
+        except Exception as e:
+            print(f"{Colors.WARNING}⚠{Colors.ENDC}")
+        return subdomains
+
+    def enumerate_subdomains_hackertarget(self) -> Set[str]:
+        """Enumera subdominios usando HackerTarget API (gratuita)"""
+        if not REQUESTS_AVAILABLE:
+            return set()
+
+        print(f"{Colors.OKBLUE}[*] HackerTarget...{Colors.ENDC}", end=' ', flush=True)
+        subdomains = set()
+        try:
+            url = f"https://api.hackertarget.com/hostsearch/?q={self.domain}"
+            response = requests.get(url, timeout=30)
+            if response.status_code == 200 and 'error' not in response.text.lower():
+                lines = response.text.split('\n')
+                for line in lines:
+                    if ',' in line:
+                        subdomain = line.split(',')[0].strip().lower()
+                        if subdomain and subdomain.endswith(self.domain):
+                            subdomains.add(subdomain)
+                print(f"{Colors.OKGREEN}✓ {len(subdomains)}{Colors.ENDC}")
+            else:
+                print(f"{Colors.WARNING}⚠ rate limit{Colors.ENDC}")
+        except Exception:
+            print(f"{Colors.WARNING}⚠{Colors.ENDC}")
+        return subdomains
+
+    def enumerate_subdomains_alienvault(self) -> Set[str]:
+        """Enumera subdominios usando AlienVault OTX"""
+        if not REQUESTS_AVAILABLE:
+            return set()
+
+        print(f"{Colors.OKBLUE}[*] AlienVault OTX...{Colors.ENDC}", end=' ', flush=True)
+        subdomains = set()
+        try:
+            url = f"https://otx.alienvault.com/api/v1/indicators/domain/{self.domain}/passive_dns"
+            headers = self.get_random_headers()
+            response = requests.get(url, headers=headers, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                passive_dns = data.get('passive_dns', [])
+                for record in passive_dns:
+                    hostname = record.get('hostname', '').lower()
+                    if hostname and hostname.endswith(self.domain):
+                        subdomains.add(hostname)
+                print(f"{Colors.OKGREEN}✓ {len(subdomains)}{Colors.ENDC}")
+            else:
+                print(f"{Colors.WARNING}⚠{Colors.ENDC}")
+        except Exception:
+            print(f"{Colors.WARNING}⚠{Colors.ENDC}")
+        return subdomains
+
+    def enumerate_subdomains_threatcrowd(self) -> Set[str]:
+        """Enumera subdominios usando ThreatCrowd"""
+        if not REQUESTS_AVAILABLE:
+            return set()
+
+        print(f"{Colors.OKBLUE}[*] ThreatCrowd...{Colors.ENDC}", end=' ', flush=True)
+        subdomains = set()
+        try:
+            url = f"https://www.threatcrowd.org/searchApi/v2/domain/report/?domain={self.domain}"
+            response = requests.get(url, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                subdomain_list = data.get('subdomains', [])
+                for subdomain in subdomain_list:
+                    subdomain = subdomain.lower().strip()
+                    if subdomain and subdomain.endswith(self.domain):
+                        subdomains.add(subdomain)
+                print(f"{Colors.OKGREEN}✓ {len(subdomains)}{Colors.ENDC}")
+            else:
+                print(f"{Colors.WARNING}⚠{Colors.ENDC}")
+        except Exception:
+            print(f"{Colors.WARNING}⚠{Colors.ENDC}")
+        return subdomains
 
     def print_banner(self):
+        mode = "OFFLINE" if self.offline else "ONLINE (APIs + Fallback)"
         banner = f"""
 {Colors.OKCYAN}
 ╔═══════════════════════════════════════════════════════════╗
-║           Google Dork Scanner v2.0                        ║
-║           100% OFFLINE - Sin dependencias de APIs         ║
+║           Google Dork Scanner v2.1                        ║
+║           Enumeración Dinámica de Subdominios             ║
 ║           Base de datos GHDB completa (300+ dorks)        ║
 ╚═══════════════════════════════════════════════════════════╝
 {Colors.ENDC}
 {Colors.WARNING}[!] Use this tool only on domains you own or have permission to test{Colors.ENDC}
 {Colors.OKBLUE}[*] Target Domain: {self.domain}{Colors.ENDC}
-{Colors.OKBLUE}[*] Modo: 100% Offline - Generación local de subdominios{Colors.ENDC}
+{Colors.OKBLUE}[*] Modo: {mode}{Colors.ENDC}
 """
         print(banner)
 
-    def enumerate_subdomains_comprehensive(self) -> Set[str]:
-        """Genera lista exhaustiva de subdominios usando 200+ prefijos comunes"""
-        print(f"\n{Colors.HEADER}[*] Generando subdominios candidatos (método offline)...{Colors.ENDC}\n")
-        print(f"{Colors.OKBLUE}[*] Generando subdominios con 200+ prefijos comunes...{Colors.ENDC}", end=' ')
+    def enumerate_subdomains_dynamic(self) -> Set[str]:
+        """Enumera subdominios usando APIs + Fallback a prefijos comunes"""
+        all_subdomains = set()
+        all_subdomains.add(self.domain)  # Dominio principal
 
-        subdomains = set()
-        subdomains.add(self.domain)  # Dominio principal
+        if not self.offline and REQUESTS_AVAILABLE:
+            print(f"\n{Colors.HEADER}[*] Enumerando subdominios desde fuentes online...{Colors.ENDC}\n")
+
+            # APIs externas
+            try:
+                subs = self.enumerate_subdomains_crtsh()
+                all_subdomains.update(subs)
+                time.sleep(2)
+            except:
+                pass
+
+            try:
+                subs = self.enumerate_subdomains_hackertarget()
+                all_subdomains.update(subs)
+                time.sleep(2)
+            except:
+                pass
+
+            try:
+                subs = self.enumerate_subdomains_alienvault()
+                all_subdomains.update(subs)
+                time.sleep(2)
+            except:
+                pass
+
+            try:
+                subs = self.enumerate_subdomains_threatcrowd()
+                all_subdomains.update(subs)
+                time.sleep(2)
+            except:
+                pass
+
+            api_count = len(all_subdomains) - 1  # menos el dominio principal
+            print(f"\n{Colors.OKGREEN}[+] Subdominios desde APIs: {api_count}{Colors.ENDC}")
+
+        # Agregar prefijos comunes (siempre, como fallback)
+        print(f"{Colors.OKBLUE}[*] Agregando prefijos comunes...{Colors.ENDC}", end=' ', flush=True)
 
         # LISTA EXHAUSTIVA DE PREFIJOS (200+) - Basado en reconocimiento real
         common_prefixes = [
@@ -156,12 +313,24 @@ class GoogleDorkScanner:
 
         for prefix in common_prefixes:
             subdomain = f"{prefix}.{self.domain}"
-            subdomains.add(subdomain)
+            all_subdomains.add(subdomain)
 
-        self.subdomains = subdomains
-        print(f"{Colors.OKGREEN}✓ {len(subdomains)} subdominios generados{Colors.ENDC}")
+        print(f"{Colors.OKGREEN}✓ {len(common_prefixes)} agregados{Colors.ENDC}")
 
-        return subdomains
+        # Limpiar wildcards y validar
+        valid_subdomains = set()
+        for subdomain in all_subdomains:
+            subdomain = subdomain.replace('*.', '').strip()
+            if subdomain and '.' in subdomain and subdomain.endswith(self.domain):
+                valid_subdomains.add(subdomain)
+
+        self.subdomains = valid_subdomains
+
+        print(f"\n{Colors.OKGREEN}{'='*60}{Colors.ENDC}")
+        print(f"{Colors.OKGREEN}[+] Total subdominios únicos: {len(valid_subdomains)}{Colors.ENDC}")
+        print(f"{Colors.OKGREEN}{'='*60}{Colors.ENDC}\n")
+
+        return valid_subdomains
 
     def get_google_dorks_ghdb(self) -> List[Dict]:
         """
@@ -649,17 +818,19 @@ class GoogleDorkScanner:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Google Dork Scanner v2.0 - 100% Offline',
+        description='Google Dork Scanner v2.1 - Enumeración Dinámica + GHDB',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Ejemplos de uso:
   python3 dork_scanner.py -d example.com
-  python3 dork_scanner.py --domain example.com --no-subdomain-gen
+  python3 dork_scanner.py -d example.com --offline
+  python3 dork_scanner.py -d example.com --no-subdomain-gen
 
-IMPORTANTE v2.0:
-  - 100% OFFLINE: Sin APIs externas
+IMPORTANTE v2.1:
+  - Enumeración DINÁMICA de subdominios (crt.sh, HackerTarget, AlienVault, ThreatCrowd)
+  - Fallback a 200+ prefijos comunes si APIs fallan
   - 300+ Google Dorks de GHDB (Exploit-DB)
-  - 200+ prefijos de subdominios comunes
+  - Modo --offline disponible para uso sin APIs
   - Genera URLs que debes abrir manualmente en el navegador
 
 Advertencia:
@@ -669,6 +840,7 @@ Advertencia:
 
     parser.add_argument('-d', '--domain', required=True, help='Dominio objetivo (ej: example.com)')
     parser.add_argument('--no-subdomain-gen', action='store_true', help='Omitir generación de subdominios (solo dominio principal)')
+    parser.add_argument('--offline', action='store_true', help='Modo offline: solo usa prefijos comunes, no APIs')
 
     args = parser.parse_args()
 
@@ -678,14 +850,20 @@ Advertencia:
         parsed = urlparse(domain)
         domain = parsed.netloc
 
+    # Verificar si requests está disponible
+    if not args.offline and not REQUESTS_AVAILABLE:
+        print(f"{Colors.WARNING}[!] requests no está instalado. Usando modo offline.{Colors.ENDC}")
+        print(f"{Colors.WARNING}[!] Instala con: pip install requests{Colors.ENDC}\n")
+        args.offline = True
+
     # Inicializar scanner
-    scanner = GoogleDorkScanner(domain)
+    scanner = GoogleDorkScanner(domain, offline=args.offline)
     scanner.print_banner()
 
     try:
         # Generar subdominios
         if not args.no_subdomain_gen:
-            scanner.enumerate_subdomains_comprehensive()
+            scanner.enumerate_subdomains_dynamic()
         else:
             scanner.subdomains.add(domain)
             print(f"{Colors.WARNING}[!] Generación de subdominios omitida. Solo dominio principal.{Colors.ENDC}")
