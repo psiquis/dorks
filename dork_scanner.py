@@ -238,12 +238,24 @@ class GoogleDorkScanner:
 
         print(f"{Colors.OKBLUE}[+] Subdominios desde APIs: {len(all_subdomains) - 1}{Colors.ENDC}")  # -1 para excluir el dominio principal
 
-        # Limpiar wildcards y validar
+        # Limpiar wildcards y validar (EXCLUIR emails y caracteres inválidos)
         valid_subdomains = set()
         for subdomain in all_subdomains:
-            subdomain = subdomain.replace('*.', '').strip()
+            subdomain = subdomain.replace('*.', '').strip().lower()
+
+            # FILTRAR: No incluir emails (que contienen @)
+            if '@' in subdomain:
+                continue
+
+            # FILTRAR: No incluir si tiene espacios
+            if ' ' in subdomain:
+                continue
+
+            # FILTRAR: Solo subdominios válidos
             if subdomain and '.' in subdomain and subdomain.endswith(self.domain):
-                valid_subdomains.add(subdomain)
+                # FILTRAR: Solo caracteres válidos para subdominios (a-z, 0-9, -, .)
+                if all(c.isalnum() or c in '.-' for c in subdomain):
+                    valid_subdomains.add(subdomain)
 
         self.subdomains = valid_subdomains
 
